@@ -1,0 +1,118 @@
+-- little script for : https://www.roblox.com/fr/games/81535567274521/Bee-Garden
+-- autobuy based on your conveyor
+
+local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local purchaseRemote = game:GetService("ReplicatedStorage").Events.PurchaseConveyorEgg
+
+-- ── UI ──
+local iconList = player.PlayerGui.Main.Frames.Conveyor.ConveyorInfo.InfoFrame.List
+
+local Window = VoidUI:CreateWindow({
+    Title = "Bee Script",
+    Size  = UDim2.new(0, 520, 0, 460),
+})
+
+local Tab = Window:AddTab("Eggs")
+local selectedEggs = {}
+
+local function getItems()
+    local items = {}
+    for _, frame in ipairs(iconList:GetChildren()) do
+        if frame:IsA("Frame") and frame.Name ~= "Template" then
+            local icon = frame:FindFirstChild("Icon", true)
+            table.insert(items, {
+                Name = frame.Name,
+                Icon = icon and icon.Image or "",
+            })
+        end
+    end
+    return items
+end
+
+local function refresh()
+    selectedEggs = {}
+    Tab:Clear()
+
+    Tab:AddLabel("Oeufs disponibles")
+
+    Tab:AddCardGrid({
+        Items    = getItems(),
+        Columns  = 3,
+        Callback = function(selected)
+            selectedEggs = selected
+        end,
+    })
+
+    Tab:AddButton({
+        Label  = "ACTUALISER",
+        Colors = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
+        Callback = function()
+            refresh()
+            VoidUI:Notify({
+                Title    = "Bee Script",
+                Message  = "Liste des oeufs mise a jour !",
+                Type     = "info",
+                Duration = 2,
+            })
+        end,
+    })
+end
+
+refresh()
+
+-- ── Détection du plot ──
+local plots = workspace.Core.Scriptable.Plots
+local playerPlot = nil
+local playerPlotId = nil
+
+for i = 1, 5 do
+    local plot = plots[tostring(i)]
+    if plot then
+        local honeyPot = plot:FindFirstChild("HoneyPot")
+        if honeyPot then
+            if honeyPot:GetAttribute("OwnerName") == player.Name then
+                playerPlot = plot
+                playerPlotId = tostring(i)
+                break
+            end
+        end
+    end
+end
+
+if not playerPlot then
+    print("Aucun plot trouve.")
+    return
+end
+
+-- ── Auto-buy ──
+local eggs = playerPlot:FindFirstChild("Eggs")
+if not eggs then
+    print("Pas de dossier Eggs.")
+    return
+end
+
+local function tryBuyEgg(egg)
+    local baseName = egg:GetAttribute("baseName")
+    if baseName and selectedEggs[baseName] then
+        task.wait(math.random(5, 10) / 10)
+        purchaseRemote:FireServer(egg.Name, playerPlotId)
+        print("Achete : " .. baseName)
+    end
+end
+
+for _, egg in ipairs(eggs:GetChildren()) do
+    task.spawn(function() tryBuyEgg(egg) end)
+end
+
+eggs.ChildAdded:Connect(function(egg)
+    task.spawn(function() tryBuyEgg(egg) end)
+end)
+
+VoidUI:Notify({
+    Title    = "Bee Script",
+    Message  = "Auto-buy actif sur le plot " .. playerPlotId,
+    Type     = "success",
+    Duration = 3,
+})
