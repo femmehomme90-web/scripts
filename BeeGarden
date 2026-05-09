@@ -1,20 +1,24 @@
 -- little script for : https://www.roblox.com/fr/games/81535567274521/Bee-Garden
 -- autobuy based on your conveyor
+-- autocollect coins
+
 
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
-local purchaseRemote = game:GetService("ReplicatedStorage").Events.PurchaseConveyorEgg
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local purchaseRemote = ReplicatedStorage.Events.PurchaseConveyorEgg
+local claimCoinsRemote = ReplicatedStorage.Events.ClaimCoins
 
 -- ── UI ──
 local iconList = player.PlayerGui.Main.Frames.Conveyor.ConveyorInfo.InfoFrame.List
-
 local Window = VoidUI:CreateWindow({
     Title = "Bee Script",
     Size  = UDim2.new(0, 520, 0, 460),
 })
-
 local Tab = Window:AddTab("Eggs")
+local TabFarm = Window:AddTab("Farm")
+
 local selectedEggs = {}
 
 local function getItems()
@@ -34,9 +38,7 @@ end
 local function refresh()
     selectedEggs = {}
     Tab:Clear()
-
     Tab:AddLabel("Oeufs disponibles")
-
     Tab:AddCardGrid({
         Items    = getItems(),
         Columns  = 3,
@@ -44,7 +46,6 @@ local function refresh()
             selectedEggs = selected
         end,
     })
-
     Tab:AddButton({
         Label  = "ACTUALISER",
         Colors = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
@@ -59,7 +60,6 @@ local function refresh()
         end,
     })
 end
-
 refresh()
 
 -- ── Détection du plot ──
@@ -110,6 +110,89 @@ eggs.ChildAdded:Connect(function(egg)
     task.spawn(function() tryBuyEgg(egg) end)
 end)
 
+-- ── Onglet Farm — Claim Coins ──
+local autoClaimEnabled = false
+local claimInterval = 20
+local nextClaimIn = 0
+
+TabFarm:AddLabel("Claim Coins")
+
+local toggleClaim = TabFarm:AddToggle({
+    Label    = "Auto Claim Coins",
+    Default  = false,
+    Callback = function(v)
+        autoClaimEnabled = v
+        VoidUI:Notify({
+            Title    = "Auto Claim",
+            Message  = v and "Claim automatique activé (/" .. claimInterval .. "s)" or "Claim automatique désactivé",
+            Type     = v and "success" or "warning",
+            Duration = 2,
+        })
+    end,
+})
+
+local sliderInterval = TabFarm:AddSlider({
+    Label    = "Intervalle",
+    Min      = 10,
+    Max      = 60,
+    Default  = 20,
+    Suffix   = "s",
+    Callback = function(v)
+        claimInterval = v
+    end,
+})
+
+local progressClaim = TabFarm:AddProgressBar({
+    Label  = "Prochain claim",
+    Value  = 20,
+    Max    = 20,
+    Suffix = "s",
+})
+
+TabFarm:AddButton({
+    Label    = "Claim maintenant",
+    Colors   = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
+    Callback = function()
+        claimCoinsRemote:FireServer("Collect_Coins")
+        nextClaimIn = claimInterval
+        VoidUI:Notify({
+            Title    = "Claim Coins",
+            Message  = "Coins réclamés manuellement !",
+            Type     = "success",
+            Duration = 2,
+        })
+    end,
+})
+
+-- ── Boucle Claim Coins ──
+task.spawn(function()
+    nextClaimIn = claimInterval
+    while true do
+        task.wait(1)
+        if autoClaimEnabled then
+            nextClaimIn = nextClaimIn - 1
+            progressClaim:SetValue(math.max(nextClaimIn, 0))
+
+            if nextClaimIn <= 0 then
+                claimCoinsRemote:FireServer("Collect_Coins")
+                nextClaimIn = claimInterval
+                progressClaim:SetValue(claimInterval)
+                VoidUI:Notify({
+                    Title    = "Claim Coins",
+                    Message  = "Coins réclamés automatiquement !",
+                    Type     = "success",
+                    Duration = 2,
+                })
+            end
+        else
+            -- Reset le compteur quand désactivé
+            nextClaimIn = claimInterval
+            progressClaim:SetValue(claimInterval)
+        end
+    end
+end)
+
+-- ── Notification de démarrage ──
 VoidUI:Notify({
     Title    = "Bee Script",
     Message  = "Auto-buy actif sur le plot " .. playerPlotId,
