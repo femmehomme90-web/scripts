@@ -1,0 +1,176 @@
+local VoidUI = loadstring(game:HttpGet("TON_URL_RAW"))()
+
+-- ════════════════════════════════════════════════════════
+--  DONNÉES
+-- ════════════════════════════════════════════════════════
+
+-- 1. Plot du joueur
+local Plots = workspace.Map.Plots
+local myPlot = nil
+
+for i = 1, 6 do
+    local plot = Plots:FindFirstChild("Plot" .. i)
+    if plot then
+        local attachment = plot:FindFirstChild("HomeLabelAttachment")
+        if attachment and #attachment:GetChildren() > 0 then
+            myPlot = plot
+            break
+        end
+    end
+end
+
+if not myPlot then
+    VoidUI:Notify({ Title = "Erreur", Message = "Plot introuvable !", Type = "error", Duration = 4 })
+    return
+end
+
+-- 2. Stands du plot
+local seedRoller = myPlot:FindFirstChild("SeedRoller")
+local stands = {}
+
+for i = 1, 6 do
+    local stand = seedRoller:FindFirstChild("Stand" .. i)
+    if stand then
+        stands[i] = { index = i, position = stand:GetPivot().Position }
+    end
+end
+
+-- 3. Graines dans le workspace -> liées à un stand
+local function getWorldSeeds()
+    local seeds = {}
+    for _, model in ipairs(workspace:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChildOfClass("UnionOperation") then
+            local seedPos = model:GetPivot().Position
+            local bestStand, bestDist = nil, math.huge
+            for _, stand in pairs(stands) do
+                local dx = seedPos.X - stand.position.X
+                local dz = seedPos.Z - stand.position.Z
+                local dist = math.sqrt(dx*dx + dz*dz)
+                if dist < bestDist then bestDist = dist; bestStand = stand end
+            end
+            if bestStand and bestDist < 15 then
+                seeds[model.Name] = bestStand.index
+            end
+        end
+    end
+    return seeds
+end
+
+-- 4. Graines depuis l'UI du jeu (icônes + noms)
+local scrollFrame = game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Menus.IndexFrame.Main.ScrollingFrame
+local allSeeds = {}
+
+for _, child in ipairs(scrollFrame:GetChildren()) do
+    if child:IsA("Frame") or child:IsA("ImageButton") or child:IsA("ImageLabel") then
+        local icon     = child:FindFirstChild("Icon")
+        local rarity   = child:FindFirstChild("RarityName")
+        local seedName = child:FindFirstChild("SeedName")
+        local name     = (seedName and seedName.Text ~= "???" and seedName.Text) or child.Name
+        table.insert(allSeeds, {
+            Name   = name,
+            Key    = child.Name,  -- nom du child pour matcher avec le workspace
+            Icon   = icon   and icon.Image or "",
+            Rarity = rarity and rarity.Text or "",
+        })
+    end
+end
+
+-- ════════════════════════════════════════════════════════
+--  UI
+-- ════════════════════════════════════════════════════════
+local Win = VoidUI:CreateWindow({
+    Title = "Grow a Garden",
+    Size  = UDim2.new(0, 600, 0, 480),
+})
+
+local Tab = Win:AddTab("Seeds")
+local TabInfo = Win:AddTab("Info")
+
+-- Convertit allSeeds en items pour CardGrid
+local cardItems = {}
+for _, s in ipairs(allSeeds) do
+    table.insert(cardItems, { Name = s.Name, Icon = s.Icon })
+end
+
+Tab:AddLabel("Sélectionne les graines à acheter")
+
+local selectedSeeds = {}
+local cardGrid = Tab:AddCardGrid({
+    Items    = cardItems,
+    Columns  = 4,
+    Callback = function(sel) selectedSeeds = sel end,
+})
+
+-- Slider délai entre achats
+local delay = 1
+local delaySlider = Tab:AddSlider({
+    Label   = "Délai entre achats",
+    Min     = 0, Max = 5, Default = 1,
+    Suffix  = "s",
+    Callback = function(v) delay = v end,
+})
+
+-- Bouton acheter
+local buying = false
+Tab:AddButton({
+    Label  = "Acheter les graines sélectionnées",
+    Colors = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
+    Callback = function()
+        if buying then return end
+        buying = true
+
+        local worldSeeds = getWorldSeeds()
+
+        local bought = 0
+        for seedName, _ in pairs(selectedSeeds) do
+            -- Cherche le Key correspondant dans allSeeds
+            local standIdx = nil
+            for _, s in ipairs(allSeeds) do
+                if s.Name == seedName then
+                    standIdx = worldSeeds[s.Key]
+                    break
+                end
+            end
+
+            if standIdx then
+                game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
+                bought = bought + 1
+                VoidUI:Notify({
+                    Title   = "Acheté !",
+                    Message = seedName .. " (Stand " .. standIdx .. ")",
+                    Type    = "success",
+                    Duration = 2,
+                })
+                task.wait(delay)
+            else
+                VoidUI:Notify({
+                    Title   = "Introuvable",
+                    Message = seedName .. " n'est pas disponible en ce moment",
+                    Type    = "warning",
+                    Duration = 2,
+                })
+            end
+        end
+
+        VoidUI:Notify({
+            Title   = "Terminé",
+            Message = bought .. " graine(s) achetée(s)",
+            Type    = "info",
+            Duration = 3,
+        })
+        buying = false
+    end,
+})
+
+-- Tab Info
+TabInfo:AddLabel("Plot")
+TabInfo:AddButton({
+    Label    = myPlot.Name,
+    Callback = function() end,
+})
+
+TabInfo:AddLabel("Stands actifs")
+local worldSeeds = getWorldSeeds()
+for name, idx in pairs(worldSeeds) do
+    TabInfo:AddLabel(name .. " -> Stand" .. idx)
+end
