@@ -1,4 +1,4 @@
-local VoidUI = loadstring(game:HttpGet("TON_URL_RAW"))()
+local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 
 -- ════════════════════════════════════════════════════════
 --  DONNÉES
