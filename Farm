@@ -1,8 +1,5 @@
--- script for https://www.roblox.com/fr/games/107646426076756/Build-A-Ring-Farm
-
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
-VoidUI:SetScriptName("Grow a Garden - AutoFarm")
-
+VoidUI:SetScriptName("Build-A-Ring-Farm script")
 
 -- ════════════════════════════════════════════════════════
 --  DONNÉES
@@ -11,7 +8,6 @@ VoidUI:SetScriptName("Grow a Garden - AutoFarm")
 -- 1. Plot du joueur
 local Plots = workspace.Map.Plots
 local myPlot = nil
-print("nigga")
 
 for i = 1, 6 do
     local plot = Plots:FindFirstChild("Plot" .. i)
@@ -103,7 +99,7 @@ for _, s in ipairs(allSeeds) do
 end
 
 -- ════════════════════════════════════════════════════════
---  UI — mode side pour les raretés
+--  UI
 -- ════════════════════════════════════════════════════════
 local Win = VoidUI:CreateWindow({
     Title       = "Grow a Garden",
@@ -115,13 +111,12 @@ local selectedSeeds = {}
 local buying        = false
 local stopBuying    = false
 
--- Un tab par rareté (on skip les raretés vides)
+-- Un tab par rareté
 for _, rarity in ipairs(rarityOrder) do
     local seeds = seedsByRarity[rarity]
     if #seeds == 0 then continue end
 
     local Tab = Win:AddTab(rarity)
-
     Tab:AddLabel(rarity .. " — " .. #seeds .. " graine(s)")
 
     local cardItems = {}
@@ -133,12 +128,9 @@ for _, rarity in ipairs(rarityOrder) do
         Items    = cardItems,
         Columns  = 3,
         Callback = function(sel)
-            -- Merge avec selectedSeeds global
-            -- D'abord on retire les graines de cette rareté
             for _, s in ipairs(seeds) do
                 selectedSeeds[s.Name] = nil
             end
-            -- Puis on ajoute les nouvelles sélections
             for k, v in pairs(sel) do
                 selectedSeeds[k] = v
             end
@@ -146,7 +138,7 @@ for _, rarity in ipairs(rarityOrder) do
     })
 end
 
--- Tab contrôle
+-- Tab Auto
 local TabCtrl = Win:AddTab("Auto")
 
 TabCtrl:AddLabel("Auto-Buy")
@@ -162,52 +154,32 @@ TabCtrl:AddToggle({
 
             task.spawn(function()
                 while not stopBuying do
-                    local snapshot = {}
-                    for k, v in pairs(selectedSeeds) do
-                        snapshot[k] = v
-                    end
-
-                    if next(snapshot) == nil then
+                    if next(selectedSeeds) == nil then
                         task.wait(1)
                         continue
                     end
 
-                    for seedName, _ in pairs(snapshot) do
-                        if stopBuying then break end
+                    -- Roll
+                    game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
+                    task.wait(3)
 
-                        local key = nil
-                        for _, s in ipairs(allSeeds) do
-                            if s.Name == seedName then key = s.Key; break end
+                    -- Scan
+                    local worldSeeds = getWorldSeeds()
+
+                    -- Achète tout ce qui match
+                    for seedName, standIdx in pairs(worldSeeds) do
+                        if stopBuying then break end
+                        if selectedSeeds[seedName] then
+                            game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
+                            VoidUI:Notify({
+                                Title    = "Acheté !",
+                                Message  = seedName .. " -> Stand" .. standIdx,
+                                Type     = "success",
+                                Duration = 3,
+                            })
+                            task.wait(0.5)
                         end
-                        if not key then continue end
-
-                        -- Roll + attendre 2s avant de scanner
-                        local standIdx = nil
-                        local rolls    = 0
-                        repeat
-                            if stopBuying then break end
-                            local worldSeeds = getWorldSeeds()
-                            standIdx = worldSeeds[key]
-                            if not standIdx then
-                                game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
-                                rolls = rolls + 1
-                                task.wait(2) -- attente après roll
-                            end
-                        until standIdx ~= nil or stopBuying
-
-                        if stopBuying then break end
-
-                        game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
-                        VoidUI:Notify({
-                            Title    = "Acheté !",
-                            Message  = seedName .. " après " .. rolls .. " roll(s)",
-                            Type     = "success",
-                            Duration = 3,
-                        })
-                        task.wait(1)
                     end
-
-                    task.wait(2)
                 end
 
                 buying = false
