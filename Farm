@@ -1,6 +1,8 @@
 -- script for https://www.roblox.com/fr/games/107646426076756/Build-A-Ring-Farm
 
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
+VoidUI:SetScriptName("Grow a Garden - AutoFarm")
+
 
 -- ════════════════════════════════════════════════════════
 --  DONNÉES
