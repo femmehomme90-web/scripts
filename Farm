@@ -1,3 +1,5 @@
+-- script for https://www.roblox.com/fr/games/107646426076756/Build-A-Ring-Farm
+
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 
 -- ════════════════════════════════════════════════════════
@@ -35,21 +37,24 @@ for i = 1, 6 do
     end
 end
 
--- 3. Scan workspace -> lie graines aux stands
+-- 3. Scan workspace -> cherche BuySeed en descendant
 local function getWorldSeeds()
     local seeds = {}
     for _, model in ipairs(workspace:GetChildren()) do
-        if model:IsA("Model") and model:FindFirstChildOfClass("UnionOperation") then
-            local seedPos = model:GetPivot().Position
-            local bestStand, bestDist = nil, math.huge
-            for _, stand in pairs(stands) do
-                local dx = seedPos.X - stand.position.X
-                local dz = seedPos.Z - stand.position.Z
-                local dist = math.sqrt(dx*dx + dz*dz)
-                if dist < bestDist then bestDist = dist; bestStand = stand end
-            end
-            if bestStand and bestDist < 15 then
-                seeds[model.Name] = bestStand.index
+        if model:IsA("Model") then
+            local buySeed = model:FindFirstChild("BuySeed", true)
+            if buySeed then
+                local seedPos = model:GetPivot().Position
+                local bestStand, bestDist = nil, math.huge
+                for _, stand in pairs(stands) do
+                    local dx = seedPos.X - stand.position.X
+                    local dz = seedPos.Z - stand.position.Z
+                    local dist = math.sqrt(dx*dx + dz*dz)
+                    if dist < bestDist then bestDist = dist; bestStand = stand end
+                end
+                if bestStand and bestDist < 15 then
+                    seeds[model.Name] = bestStand.index
+                end
             end
         end
     end
@@ -60,8 +65,13 @@ end
 local scrollFrame = game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Menus.IndexFrame.Main.ScrollingFrame
 local allSeeds = {}
 
+local rarityOrder = {
+    "Common", "Uncommon", "Rare", "Epic", "Legendary",
+    "Divine", "Prismatic", "Secret", "Exotic", "Transcended"
+}
+
 for _, child in ipairs(scrollFrame:GetChildren()) do
-    if child:IsA("Frame") or child:IsA("ImageButton") or child:IsA("ImageLabel") then
+    if child:IsA("Frame") then
         local icon     = child:FindFirstChild("Icon")
         local rarity   = child:FindFirstChild("RarityName")
         local seedName = child:FindFirstChild("SeedName")
@@ -69,184 +79,193 @@ for _, child in ipairs(scrollFrame:GetChildren()) do
         table.insert(allSeeds, {
             Name   = name,
             Key    = child.Name,
-            Icon   = icon and icon.Image or "",
-            Rarity = rarity and rarity.Text or "",
+            Icon   = icon   and icon.Image or "",
+            Rarity = rarity and rarity.Text or "Common",
         })
     end
 end
 
--- ════════════════════════════════════════════════════════
---  UI
--- ════════════════════════════════════════════════════════
-local Win = VoidUI:CreateWindow({
-    Title = "Grow a Garden",
-    Size  = UDim2.new(0, 600, 0, 480),
-})
-
-local TabSeeds = Win:AddTab("Seeds")
-local TabFarm  = Win:AddTab("Farm")
-local TabInfo  = Win:AddTab("Info")
-
--- ════════════════════════════════════════════════════════
---  TAB SEEDS — autobuy / autoroll
--- ════════════════════════════════════════════════════════
-local cardItems = {}
-for _, s in ipairs(allSeeds) do
-    table.insert(cardItems, { Name = s.Name, Icon = s.Icon })
+-- Groupe par rareté
+local seedsByRarity = {}
+for _, r in ipairs(rarityOrder) do
+    seedsByRarity[r] = {}
 end
 
-TabSeeds:AddLabel("Sélectionne les graines à acheter")
+for _, s in ipairs(allSeeds) do
+    if seedsByRarity[s.Rarity] then
+        table.insert(seedsByRarity[s.Rarity], s)
+    else
+        table.insert(seedsByRarity["Common"], s)
+    end
+end
+
+-- ════════════════════════════════════════════════════════
+--  UI — mode side pour les raretés
+-- ════════════════════════════════════════════════════════
+local Win = VoidUI:CreateWindow({
+    Title       = "Grow a Garden",
+    Size        = UDim2.new(0, 650, 0, 500),
+    TabPosition = "side",
+})
 
 local selectedSeeds = {}
-TabSeeds:AddCardGrid({
-    Items    = cardItems,
-    Columns  = 4,
-    Callback = function(sel) selectedSeeds = sel end,
-})
+local buying        = false
+local stopBuying    = false
 
-local delay = 1
-TabSeeds:AddSlider({
-    Label    = "Délai entre achats",
-    Min      = 0, Max = 5, Default = 1,
-    Suffix   = "s",
-    Callback = function(v) delay = v end,
-})
+-- Un tab par rareté (on skip les raretés vides)
+for _, rarity in ipairs(rarityOrder) do
+    local seeds = seedsByRarity[rarity]
+    if #seeds == 0 then continue end
 
-local buying     = false
-local stopBuying = false
+    local Tab = Win:AddTab(rarity)
 
-TabSeeds:AddButton({
-    Label  = "▶ Start Auto-Buy",
-    Colors = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
-    Callback = function()
-        if buying then return end
-        buying     = true
-        stopBuying = false
+    Tab:AddLabel(rarity .. " — " .. #seeds .. " graine(s)")
 
-        task.spawn(function()
-            while not stopBuying do
-                -- Snapshot de la sélection au début de chaque cycle
-                local snapshot = {}
-                for k, v in pairs(selectedSeeds) do
-                    snapshot[k] = v
-                end
+    local cardItems = {}
+    for _, s in ipairs(seeds) do
+        table.insert(cardItems, { Name = s.Name, Icon = s.Icon })
+    end
 
-                if next(snapshot) == nil then
-                    task.wait(1)
-                    continue
-                end
-
-                for seedName, _ in pairs(snapshot) do
-                    if stopBuying then break end
-
-                    local key = nil
-                    for _, s in ipairs(allSeeds) do
-                        if s.Name == seedName then key = s.Key; break end
-                    end
-                    if not key then continue end
-
-                    -- Roll sans notif pour ne pas spammer
-                    local standIdx = nil
-                    local rolls    = 0
-                    repeat
-                        if stopBuying then break end
-                        local worldSeeds = getWorldSeeds()
-                        standIdx = worldSeeds[key]
-                        if not standIdx then
-                            game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
-                            rolls = rolls + 1
-                            task.wait(3) -- délai raisonnable entre rolls
-                        end
-                    until standIdx ~= nil or stopBuying
-
-                    if stopBuying then break end
-
-                    game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
-                    VoidUI:Notify({
-                        Title    = "Acheté !",
-                        Message  = seedName .. " après " .. rolls .. " roll(s) (Stand " .. standIdx .. ")",
-                        Type     = "success",
-                        Duration = 3,
-                    })
-                    task.wait(delay)
-                end
-
-                task.wait(2)
+    Tab:AddCardGrid({
+        Items    = cardItems,
+        Columns  = 3,
+        Callback = function(sel)
+            -- Merge avec selectedSeeds global
+            -- D'abord on retire les graines de cette rareté
+            for _, s in ipairs(seeds) do
+                selectedSeeds[s.Name] = nil
             end
+            -- Puis on ajoute les nouvelles sélections
+            for k, v in pairs(sel) do
+                selectedSeeds[k] = v
+            end
+        end,
+    })
+end
 
-            buying = false
+-- Tab contrôle
+local TabCtrl = Win:AddTab("Auto")
+
+TabCtrl:AddLabel("Auto-Buy")
+
+TabCtrl:AddToggle({
+    Label   = "Activer Auto-Buy",
+    Default = false,
+    Callback = function(state)
+        if state then
+            if buying then return end
+            buying     = true
+            stopBuying = false
+
+            task.spawn(function()
+                while not stopBuying do
+                    local snapshot = {}
+                    for k, v in pairs(selectedSeeds) do
+                        snapshot[k] = v
+                    end
+
+                    if next(snapshot) == nil then
+                        task.wait(1)
+                        continue
+                    end
+
+                    for seedName, _ in pairs(snapshot) do
+                        if stopBuying then break end
+
+                        local key = nil
+                        for _, s in ipairs(allSeeds) do
+                            if s.Name == seedName then key = s.Key; break end
+                        end
+                        if not key then continue end
+
+                        -- Roll + attendre 2s avant de scanner
+                        local standIdx = nil
+                        local rolls    = 0
+                        repeat
+                            if stopBuying then break end
+                            local worldSeeds = getWorldSeeds()
+                            standIdx = worldSeeds[key]
+                            if not standIdx then
+                                game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
+                                rolls = rolls + 1
+                                task.wait(2) -- attente après roll
+                            end
+                        until standIdx ~= nil or stopBuying
+
+                        if stopBuying then break end
+
+                        game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
+                        VoidUI:Notify({
+                            Title    = "Acheté !",
+                            Message  = seedName .. " après " .. rolls .. " roll(s)",
+                            Type     = "success",
+                            Duration = 3,
+                        })
+                        task.wait(1)
+                    end
+
+                    task.wait(2)
+                end
+
+                buying = false
+            end)
+        else
+            stopBuying = true
             VoidUI:Notify({
                 Title    = "Stoppé",
                 Message  = "Auto-buy arrêté.",
                 Type     = "warning",
                 Duration = 3,
             })
-        end)
+        end
     end,
 })
 
-TabSeeds:AddButton({
-    Label    = "■ Stop Auto-Buy",
-    Callback = function()
-        if not buying then return end
-        stopBuying = true
-    end,
-})
+TabCtrl:AddLabel("Auto-Collect")
 
--- ════════════════════════════════════════════════════════
---  TAB FARM — autocollect
--- ════════════════════════════════════════════════════════
 local collecting     = false
 local stopCollecting = false
 
-TabFarm:AddLabel("Auto Collect")
+TabCtrl:AddToggle({
+    Label   = "Activer Auto-Collect",
+    Default = false,
+    Callback = function(state)
+        if state then
+            if collecting then return end
+            collecting     = true
+            stopCollecting = false
 
-TabFarm:AddButton({
-    Label  = "▶ Start Auto-Collect",
-    Colors = { Color3.fromRGB(55, 210, 120), Color3.fromRGB(30, 160, 90) },
-    Callback = function()
-        if collecting then return end
-        collecting     = true
-        stopCollecting = false
-
-        task.spawn(function()
-            while not stopCollecting do
-                game:GetService("ReplicatedStorage").Remotes.SellCrates:FireServer()
-                VoidUI:Notify({
-                    Title    = "Collect !",
-                    Message  = "Caisses vendues.",
-                    Type     = "success",
-                    Duration = 2,
-                })
-                task.wait(120)
-            end
-
-            collecting = false
+            task.spawn(function()
+                while not stopCollecting do
+                    game:GetService("ReplicatedStorage").Remotes.SellCrates:FireServer()
+                    VoidUI:Notify({
+                        Title    = "Collect !",
+                        Message  = "Caisses vendues.",
+                        Type     = "success",
+                        Duration = 2,
+                    })
+                    task.wait(120)
+                end
+                collecting = false
+            end)
+        else
+            stopCollecting = true
             VoidUI:Notify({
                 Title    = "Stoppé",
                 Message  = "Auto-collect arrêté.",
                 Type     = "warning",
                 Duration = 3,
             })
-        end)
+        end
     end,
 })
 
-TabFarm:AddButton({
-    Label    = "■ Stop Auto-Collect",
-    Callback = function()
-        if not collecting then return end
-        stopCollecting = true
-    end,
-})
-
--- ════════════════════════════════════════════════════════
---  TAB INFO
--- ════════════════════════════════════════════════════════
+-- Tab Info
+local TabInfo = Win:AddTab("Info")
 TabInfo:AddLabel("Plot détecté")
 TabInfo:AddButton({ Label = myPlot.Name, Callback = function() end })
 
-TabInfo:AddLabel("Stands actifs au démarrage")
+TabInfo:AddLabel("Stands au démarrage")
 local initSeeds = getWorldSeeds()
 for name, idx in pairs(initSeeds) do
     TabInfo:AddLabel(name .. "  ->  Stand" .. idx)
