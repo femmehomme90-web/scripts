@@ -102,7 +102,7 @@ end
 --  UI
 -- ════════════════════════════════════════════════════════
 local Win = VoidUI:CreateWindow({
-    Title       = "Grow a Garden",
+    Title       = "BARF script",
     Size        = UDim2.new(0, 650, 0, 500),
     TabPosition = "side",
 })
