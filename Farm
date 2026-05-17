@@ -35,7 +35,7 @@ for i = 1, 6 do
     end
 end
 
--- 3. Graines dans le workspace -> liées à un stand
+-- 3. Scan workspace -> lie graines aux stands
 local function getWorldSeeds()
     local seeds = {}
     for _, model in ipairs(workspace:GetChildren()) do
@@ -56,7 +56,7 @@ local function getWorldSeeds()
     return seeds
 end
 
--- 4. Graines depuis l'UI du jeu (icônes + noms)
+-- 4. Graines depuis l'UI du jeu
 local scrollFrame = game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Menus.IndexFrame.Main.ScrollingFrame
 local allSeeds = {}
 
@@ -68,8 +68,8 @@ for _, child in ipairs(scrollFrame:GetChildren()) do
         local name     = (seedName and seedName.Text ~= "???" and seedName.Text) or child.Name
         table.insert(allSeeds, {
             Name   = name,
-            Key    = child.Name,  -- nom du child pour matcher avec le workspace
-            Icon   = icon   and icon.Image or "",
+            Key    = child.Name,
+            Icon   = icon and icon.Image or "",
             Rarity = rarity and rarity.Text or "",
         })
     end
@@ -83,94 +83,165 @@ local Win = VoidUI:CreateWindow({
     Size  = UDim2.new(0, 600, 0, 480),
 })
 
-local Tab = Win:AddTab("Seeds")
-local TabInfo = Win:AddTab("Info")
+local TabSeeds   = Win:AddTab("Seeds")
+local TabFarm    = Win:AddTab("Farm")
+local TabInfo    = Win:AddTab("Info")
 
--- Convertit allSeeds en items pour CardGrid
+-- ════════════════════════════════════════════════════════
+--  TAB SEEDS — autobuy / autoroll
+-- ════════════════════════════════════════════════════════
 local cardItems = {}
 for _, s in ipairs(allSeeds) do
     table.insert(cardItems, { Name = s.Name, Icon = s.Icon })
 end
 
-Tab:AddLabel("Sélectionne les graines à acheter")
+TabSeeds:AddLabel("Sélectionne les graines à acheter")
 
 local selectedSeeds = {}
-local cardGrid = Tab:AddCardGrid({
+TabSeeds:AddCardGrid({
     Items    = cardItems,
     Columns  = 4,
     Callback = function(sel) selectedSeeds = sel end,
 })
 
--- Slider délai entre achats
 local delay = 1
-local delaySlider = Tab:AddSlider({
-    Label   = "Délai entre achats",
-    Min     = 0, Max = 5, Default = 1,
-    Suffix  = "s",
+TabSeeds:AddSlider({
+    Label    = "Délai entre achats",
+    Min      = 0, Max = 5, Default = 1,
+    Suffix   = "s",
     Callback = function(v) delay = v end,
 })
 
--- Bouton acheter
-local buying = false
-Tab:AddButton({
-    Label  = "Acheter les graines sélectionnées",
+local buying        = false
+local stopBuying    = false
+
+TabSeeds:AddButton({
+    Label  = "▶ Start Auto-Buy",
     Colors = { Color3.fromRGB(130, 80, 255), Color3.fromRGB(220, 80, 160) },
     Callback = function()
         if buying then return end
-        buying = true
+        buying     = true
+        stopBuying = false
 
-        local worldSeeds = getWorldSeeds()
+        task.spawn(function()
+            while not stopBuying do
+                for seedName, _ in pairs(selectedSeeds) do
+                    if stopBuying then break end
 
-        local bought = 0
-        for seedName, _ in pairs(selectedSeeds) do
-            -- Cherche le Key correspondant dans allSeeds
-            local standIdx = nil
-            for _, s in ipairs(allSeeds) do
-                if s.Name == seedName then
-                    standIdx = worldSeeds[s.Key]
-                    break
+                    local key = nil
+                    for _, s in ipairs(allSeeds) do
+                        if s.Name == seedName then key = s.Key; break end
+                    end
+                    if not key then continue end
+
+                    local standIdx = nil
+                    local rolls    = 0
+                    repeat
+                        if stopBuying then break end
+                        local worldSeeds = getWorldSeeds()
+                        standIdx = worldSeeds[key]
+                        if not standIdx then
+                            game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
+                            rolls = rolls + 1
+                            VoidUI:Notify({
+                                Title    = "Roll #" .. rolls,
+                                Message  = "Recherche : " .. seedName,
+                                Type     = "info",
+                                Duration = 1,
+                            })
+                            task.wait(1.5)
+                        end
+                    until standIdx ~= nil or stopBuying
+
+                    if stopBuying then break end
+
+                    game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
+                    VoidUI:Notify({
+                        Title    = "Acheté !",
+                        Message  = seedName .. " après " .. rolls .. " roll(s) (Stand " .. standIdx .. ")",
+                        Type     = "success",
+                        Duration = 3,
+                    })
+                    task.wait(delay)
                 end
+
+                task.wait(2)
             end
 
-            if standIdx then
-                game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
-                bought = bought + 1
-                VoidUI:Notify({
-                    Title   = "Acheté !",
-                    Message = seedName .. " (Stand " .. standIdx .. ")",
-                    Type    = "success",
-                    Duration = 2,
-                })
-                task.wait(delay)
-            else
-                VoidUI:Notify({
-                    Title   = "Introuvable",
-                    Message = seedName .. " n'est pas disponible en ce moment",
-                    Type    = "warning",
-                    Duration = 2,
-                })
-            end
-        end
-
-        VoidUI:Notify({
-            Title   = "Terminé",
-            Message = bought .. " graine(s) achetée(s)",
-            Type    = "info",
-            Duration = 3,
-        })
-        buying = false
+            buying = false
+            VoidUI:Notify({
+                Title    = "Stoppé",
+                Message  = "Auto-buy arrêté.",
+                Type     = "warning",
+                Duration = 3,
+            })
+        end)
     end,
 })
 
--- Tab Info
-TabInfo:AddLabel("Plot")
-TabInfo:AddButton({
-    Label    = myPlot.Name,
-    Callback = function() end,
+TabSeeds:AddButton({
+    Label    = "■ Stop Auto-Buy",
+    Callback = function()
+        if not buying then return end
+        stopBuying = true
+    end,
 })
 
-TabInfo:AddLabel("Stands actifs")
-local worldSeeds = getWorldSeeds()
-for name, idx in pairs(worldSeeds) do
-    TabInfo:AddLabel(name .. " -> Stand" .. idx)
+-- ════════════════════════════════════════════════════════
+--  TAB FARM — autocollect
+-- ════════════════════════════════════════════════════════
+local collecting     = false
+local stopCollecting = false
+
+TabFarm:AddLabel("Auto Collect")
+
+TabFarm:AddButton({
+    Label  = "▶ Start Auto-Collect",
+    Colors = { Color3.fromRGB(55, 210, 120), Color3.fromRGB(30, 160, 90) },
+    Callback = function()
+        if collecting then return end
+        collecting     = true
+        stopCollecting = false
+
+        task.spawn(function()
+            while not stopCollecting do
+                game:GetService("ReplicatedStorage").Remotes.SellCrates:FireServer()
+                VoidUI:Notify({
+                    Title    = "Collect !",
+                    Message  = "Caisses vendues.",
+                    Type     = "success",
+                    Duration = 2,
+                })
+                task.wait(120)
+            end
+
+            collecting = false
+            VoidUI:Notify({
+                Title    = "Stoppé",
+                Message  = "Auto-collect arrêté.",
+                Type     = "warning",
+                Duration = 3,
+            })
+        end)
+    end,
+})
+
+TabFarm:AddButton({
+    Label    = "■ Stop Auto-Collect",
+    Callback = function()
+        if not collecting then return end
+        stopCollecting = true
+    end,
+})
+
+-- ════════════════════════════════════════════════════════
+--  TAB INFO
+-- ════════════════════════════════════════════════════════
+TabInfo:AddLabel("Plot détecté")
+TabInfo:AddButton({ Label = myPlot.Name, Callback = function() end })
+
+TabInfo:AddLabel("Stands actifs au démarrage")
+local initSeeds = getWorldSeeds()
+for name, idx in pairs(initSeeds) do
+    TabInfo:AddLabel(name .. "  ->  Stand" .. idx)
 end
