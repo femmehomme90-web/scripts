@@ -83,9 +83,9 @@ local Win = VoidUI:CreateWindow({
     Size  = UDim2.new(0, 600, 0, 480),
 })
 
-local TabSeeds   = Win:AddTab("Seeds")
-local TabFarm    = Win:AddTab("Farm")
-local TabInfo    = Win:AddTab("Info")
+local TabSeeds = Win:AddTab("Seeds")
+local TabFarm  = Win:AddTab("Farm")
+local TabInfo  = Win:AddTab("Info")
 
 -- ════════════════════════════════════════════════════════
 --  TAB SEEDS — autobuy / autoroll
@@ -112,8 +112,8 @@ TabSeeds:AddSlider({
     Callback = function(v) delay = v end,
 })
 
-local buying        = false
-local stopBuying    = false
+local buying     = false
+local stopBuying = false
 
 TabSeeds:AddButton({
     Label  = "▶ Start Auto-Buy",
@@ -125,7 +125,18 @@ TabSeeds:AddButton({
 
         task.spawn(function()
             while not stopBuying do
-                for seedName, _ in pairs(selectedSeeds) do
+                -- Snapshot de la sélection au début de chaque cycle
+                local snapshot = {}
+                for k, v in pairs(selectedSeeds) do
+                    snapshot[k] = v
+                end
+
+                if next(snapshot) == nil then
+                    task.wait(1)
+                    continue
+                end
+
+                for seedName, _ in pairs(snapshot) do
                     if stopBuying then break end
 
                     local key = nil
@@ -134,6 +145,7 @@ TabSeeds:AddButton({
                     end
                     if not key then continue end
 
+                    -- Roll sans notif pour ne pas spammer
                     local standIdx = nil
                     local rolls    = 0
                     repeat
@@ -143,13 +155,7 @@ TabSeeds:AddButton({
                         if not standIdx then
                             game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
                             rolls = rolls + 1
-                            VoidUI:Notify({
-                                Title    = "Roll #" .. rolls,
-                                Message  = "Recherche : " .. seedName,
-                                Type     = "info",
-                                Duration = 1,
-                            })
-                            task.wait(1.5)
+                            task.wait(3) -- délai raisonnable entre rolls
                         end
                     until standIdx ~= nil or stopBuying
 
