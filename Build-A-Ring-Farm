@@ -1,4 +1,3 @@
--- Script for : https://www.roblox.com/fr/games/126884695634066/Grow-a-Garden
 -- Browse seeds by rarity, select the ones you want, then enable Auto-Buy in the Auto tab.
 -- The script will roll the seed machine and purchase any matching seed automatically.
 -- Enable Auto-Collect to sell your crates every 2 minutes.
@@ -135,7 +134,7 @@ end
 --  UI
 -- ════════════════════════════════════════════════════════
 local Win = VoidUI:CreateWindow({
-    Title       = "Grow a Garden",
+    Title       = "BARF",
     Size        = UDim2.new(0, 650, 0, 500),
     TabPosition = "side",
 })
