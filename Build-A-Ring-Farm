@@ -1,6 +1,8 @@
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 VoidUI:SetScriptName("Build-A-Ring-Farm script")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 -- ════════════════════════════════════════════════════════
 --  DONNÉES
 -- ════════════════════════════════════════════════════════
@@ -102,7 +104,7 @@ end
 --  UI
 -- ════════════════════════════════════════════════════════
 local Win = VoidUI:CreateWindow({
-    Title       = "BARF script",
+    Title       = "Grow a Garden",
     Size        = UDim2.new(0, 650, 0, 500),
     TabPosition = "side",
 })
@@ -138,9 +140,12 @@ for _, rarity in ipairs(rarityOrder) do
     })
 end
 
--- Tab Auto
+-- ════════════════════════════════════════════════════════
+--  TAB AUTO
+-- ════════════════════════════════════════════════════════
 local TabCtrl = Win:AddTab("Auto")
 
+-- ── Auto-Buy ──
 TabCtrl:AddLabel("Auto-Buy")
 
 TabCtrl:AddToggle({
@@ -159,18 +164,15 @@ TabCtrl:AddToggle({
                         continue
                     end
 
-                    -- Roll
-                    game:GetService("ReplicatedStorage").Remotes.RollSeeds:FireServer()
+                    ReplicatedStorage.Remotes.RollSeeds:FireServer()
                     task.wait(3)
 
-                    -- Scan
                     local worldSeeds = getWorldSeeds()
 
-                    -- Achète tout ce qui match
                     for seedName, standIdx in pairs(worldSeeds) do
                         if stopBuying then break end
                         if selectedSeeds[seedName] then
-                            game:GetService("ReplicatedStorage").Remotes.BuySeed:FireServer(standIdx)
+                            ReplicatedStorage.Remotes.BuySeed:FireServer(standIdx)
                             VoidUI:Notify({
                                 Title    = "Acheté !",
                                 Message  = seedName .. " -> Stand" .. standIdx,
@@ -196,6 +198,7 @@ TabCtrl:AddToggle({
     end,
 })
 
+-- ── Auto-Collect ──
 TabCtrl:AddLabel("Auto-Collect")
 
 local collecting     = false
@@ -212,7 +215,7 @@ TabCtrl:AddToggle({
 
             task.spawn(function()
                 while not stopCollecting do
-                    game:GetService("ReplicatedStorage").Remotes.SellCrates:FireServer()
+                    ReplicatedStorage.Remotes.SellCrates:FireServer()
                     VoidUI:Notify({
                         Title    = "Collect !",
                         Message  = "Caisses vendues.",
@@ -235,7 +238,54 @@ TabCtrl:AddToggle({
     end,
 })
 
--- Tab Info
+-- ── Auto-Upgrade ──
+TabCtrl:AddLabel("Auto-Upgrade Plants")
+
+local targetLevel = 10
+TabCtrl:AddSlider({
+    Label    = "Niveau cible",
+    Min      = 1, Max = 75, Default = 10,
+    Callback = function(v) targetLevel = v end,
+})
+
+TabCtrl:AddButton({
+    Label  = "▶ Upgrade toutes les plantes",
+    Colors = { Color3.fromRGB(255, 140, 40), Color3.fromRGB(255, 200, 40) },
+    Callback = function()
+        local farmPlot = myPlot:FindFirstChild("FarmPlot")
+        if not farmPlot then
+            VoidUI:Notify({ Title = "Erreur", Message = "FarmPlot introuvable !", Type = "error", Duration = 3 })
+            return
+        end
+
+        task.spawn(function()
+            local upgraded = 0
+            for _, plant in ipairs(farmPlot:GetChildren()) do
+                local dirt = plant:FindFirstChild("Dirt")
+                if dirt and dirt:GetAttribute("lvl") ~= nil then
+                    local currentLvl = dirt:GetAttribute("lvl")
+                    while currentLvl < targetLevel do
+                        ReplicatedStorage.Remotes.UpgradePlant:InvokeServer(dirt)
+                        task.wait(0.1)
+                        currentLvl = dirt:GetAttribute("lvl")
+                    end
+                    upgraded = upgraded + 1
+                end
+            end
+
+            VoidUI:Notify({
+                Title    = "Upgrade terminé !",
+                Message  = upgraded .. " plante(s) au niveau " .. targetLevel,
+                Type     = "success",
+                Duration = 4,
+            })
+        end)
+    end,
+})
+
+-- ════════════════════════════════════════════════════════
+--  TAB INFO
+-- ════════════════════════════════════════════════════════
 local TabInfo = Win:AddTab("Info")
 TabInfo:AddLabel("Plot détecté")
 TabInfo:AddButton({ Label = myPlot.Name, Callback = function() end })
