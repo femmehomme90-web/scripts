@@ -1,7 +1,6 @@
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 VoidUI:SetScriptName("Build-A-Ring-Farm script")
-print("V2")
-
+print("V3")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- ════════════════════════════════════════════════════════
@@ -63,7 +62,29 @@ local function getWorldSeeds()
     return seeds
 end
 
--- 4. Graines depuis l'UI du jeu
+-- 4. Collecte tous les FarmPlot (rez + étages)
+local function getFarmPlots()
+    local farmPlots = {}
+
+    local fp = myPlot:FindFirstChild("FarmPlot")
+    if fp then table.insert(farmPlots, fp) end
+
+    local second = myPlot:FindFirstChild("SecondFloor")
+    if second then
+        local fp2 = second:FindFirstChild("FarmPlot")
+        if fp2 then table.insert(farmPlots, fp2) end
+    end
+
+    local third = myPlot:FindFirstChild("ThirdFloor")
+    if third then
+        local fp3 = third:FindFirstChild("FarmPlot")
+        if fp3 then table.insert(farmPlots, fp3) end
+    end
+
+    return farmPlots
+end
+
+-- 5. Graines depuis l'UI du jeu
 local scrollFrame = game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Menus.IndexFrame.Main.ScrollingFrame
 local allSeeds = {}
 
@@ -253,45 +274,17 @@ TabCtrl:AddButton({
     Label  = "▶ Upgrade toutes les plantes",
     Colors = { Color3.fromRGB(255, 140, 40), Color3.fromRGB(255, 200, 40) },
     Callback = function()
-        local farmPlot = myPlot:FindFirstChild("FarmPlot")
-        if not farmPlot then
+        local farmPlots = getFarmPlots()
+        if #farmPlots == 0 then
             VoidUI:Notify({ Title = "Erreur", Message = "FarmPlot introuvable !", Type = "error", Duration = 3 })
             return
         end
 
         task.spawn(function()
             local upgraded = 0
-            for _, plant in ipairs(farmPlot:GetChildren()) do
-                local dirt = plant:FindFirstChild("Dirt")
-                if dirt and dirt:GetAttribute("PlantLevel") ~= nil then
-                    local currentLvl = dirt:GetAttribute("PlantLevel") or 0
-                    while currentLvl < targetLevel do
-                        ReplicatedStorage.Remotes.UpgradePlant:InvokeServer(dirt)
-                        task.wait(0.1)
-                        currentLvl = dirt:GetAttribute("PlantLevel") or 0
-                    end
-                    upgraded = upgraded + 1
-                end
-            end
-
-            VoidUI:Notify({
-                Title    = "Upgrade terminé !",
-                Message  = upgraded .. " plante(s) au niveau " .. targetLevel,
-                Type     = "success",
-                Duration = 4,
-            })
-        end)
-    end,
-})
-
--- ════════════════════════════════════════════════════════
---  TAB INFO
--- ════════════════════════════════════════════════════════
-local TabInfo = Win:AddTab("Info")
-TabInfo:AddLabel("Plot détecté")
-TabInfo:AddButton({ Label = myPlot.Name, Callback = function() end })
-
-TabInfo:AddLabel("Stands au démarrage")
+            for _, farmPlot in ipairs(farmPlots) do
+                for _, plant in ipairs(farmPlot:GetChildren()) do
+                    local dirt
 local initSeeds = getWorldSeeds()
 for name, idx in pairs(initSeeds) do
     TabInfo:AddLabel(name .. "  ->  Stand" .. idx)
