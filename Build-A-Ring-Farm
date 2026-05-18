@@ -262,7 +262,7 @@ TabCtrl:AddButton({
             local upgraded = 0
             for _, plant in ipairs(farmPlot:GetChildren()) do
                 local dirt = plant:FindFirstChild("Dirt")
-                if dirt and dirt:GetAttribute("lvl") ~= nil then
+                if dirt and dirt:GetAttribute("PlantLevel") ~= nil then
                     local currentLvl = dirt:GetAttribute("lvl")
                     while currentLvl < targetLevel do
                         ReplicatedStorage.Remotes.UpgradePlant:InvokeServer(dirt)
