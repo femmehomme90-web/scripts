@@ -1,5 +1,6 @@
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 VoidUI:SetScriptName("Build-A-Ring-Farm script")
+print("V2")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
