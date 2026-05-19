@@ -3,7 +3,7 @@
 -- Enable Auto-Collect to sell your crates every 2 minutes.
 
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
-VoidUI:SetScriptName("Build-A-Ring-Farm script")
+VoidUI:SetScriptName("Build-A-Ring-Farm Script")
 print("V3")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players           = game:GetService("Players")
@@ -11,6 +11,10 @@ local Players           = game:GetService("Players")
 -- ════════════════════════════════════════════════════════
 --  DATA
 -- ════════════════════════════════════════════════════════
+
+local player    = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid  = character:WaitForChild("Humanoid")
 
 local Plots  = workspace.Map.Plots
 local myPlot = nil
@@ -70,6 +74,38 @@ local function getFarmPlots()
     return out
 end
 
+-- ── Fertilizer ──
+local FERTILIZER_NAMES = {
+    "Normal Fertilizer",
+    "Strong Fertilizer",
+    "Super Fertilizer",
+}
+
+local function getFertilizerFromBackpack()
+    for _, tool in ipairs(player.Backpack:GetChildren()) do
+        for _, name in ipairs(FERTILIZER_NAMES) do
+            if string.find(tool.Name, name, 1, true) then
+                return tool
+            end
+        end
+    end
+    return nil
+end
+
+local function getUnfertilizedDirt()
+    for _, fp in ipairs(getFarmPlots()) do
+        for _, plant in ipairs(fp:GetChildren()) do
+            local dirt = plant:FindFirstChild("Dirt")
+            if dirt and dirt:GetAttribute("PlantLevel") ~= nil then
+                if not dirt:GetAttribute("Fertilized") then
+                    return dirt
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- ── Seeds from game UI ──
 local seedScrollFrame = Players.LocalPlayer.PlayerGui.MainUI.Menus.IndexFrame.Main.ScrollingFrame
 
@@ -115,7 +151,7 @@ local function getShopItems()
                 table.insert(items, {
                     Name      = gearName.Text,
                     Icon      = imgLabel.Image,
-                    StockLabel = rarLabel,  -- live ref to read stock
+                    StockLabel = rarLabel,
                 })
             end
         end
@@ -123,7 +159,6 @@ local function getShopItems()
     return items
 end
 
--- Parse "Stock: 5" -> 5
 local function parseStock(stockLabel)
     if not stockLabel then return 0 end
     local n = tonumber(stockLabel.Text:match("%d+"))
@@ -178,14 +213,12 @@ local TabShop = Win:AddTab("Shop")
 
 TabShop:AddLabel("Gear Shop — Auto-Buy")
 
--- Construit les cards du shop
 local shopItems = getShopItems()
 local shopCardItems = {}
 for _, item in ipairs(shopItems) do
     table.insert(shopCardItems, { Name = item.Name, Icon = item.Icon })
 end
 
--- Stocke les refs de StockLabel par nom pour le loop
 local stockLabelByName = {}
 for _, item in ipairs(shopItems) do
     stockLabelByName[item.Name] = item.StockLabel
@@ -245,7 +278,7 @@ TabCtrl:AddToggle({
 -- ── Auto-Buy Shop ──
 TabCtrl:AddLabel("Auto-Buy Shop")
 
-local shopInterval   = 120  -- secondes entre chaque scan
+local shopInterval   = 120
 local buyingShop     = false
 local stopBuyingShop = false
 
@@ -269,19 +302,22 @@ TabCtrl:AddToggle({
                             if stopBuyingShop then break end
                             local stock = parseStock(stockLabelByName[itemName])
                             if stock > 0 then
-                                local ok, err = pcall(function()
-                                    ReplicatedStorage.Remotes.Gear.Transaction:InvokeServer(itemName)
-                                end)
-                                if ok then
-                                    VoidUI:Notify({ Title = "Purchased!", Message = itemName .. " (stock: " .. stock .. ")", Type = "success", Duration = 3 })
-                                else
-                                    VoidUI:Notify({ Title = "Error", Message = "Failed to buy " .. itemName, Type = "error", Duration = 3 })
+                                for i = 1, stock do
+                                    if stopBuyingShop then break end
+                                    local ok, err = pcall(function()
+                                        ReplicatedStorage.Remotes.Gear.Transaction:InvokeServer(itemName)
+                                    end)
+                                    if ok then
+                                        VoidUI:Notify({ Title = "Purchased!", Message = itemName .. " (" .. i .. "/" .. stock .. ")", Type = "success", Duration = 3 })
+                                    else
+                                        VoidUI:Notify({ Title = "Error", Message = "Failed to buy " .. itemName, Type = "error", Duration = 3 })
+                                        break
+                                    end
+                                    task.wait(0.1)
                                 end
-                                task.wait(0.5)
                             end
                         end
                     end
-                    -- Attendre l'intervalle configuré
                     local elapsed = 0
                     while elapsed < shopInterval and not stopBuyingShop do
                         task.wait(1)
@@ -354,6 +390,48 @@ TabCtrl:AddButton({
             end
             VoidUI:Notify({ Title = "Done!", Message = upgraded .. " plant(s) upgraded to level " .. targetLevel, Type = "success", Duration = 4 })
         end)
+    end,
+})
+
+-- ── Auto-Fertilizer ──
+TabCtrl:AddLabel("Auto-Fertilizer")
+local fertilizing     = false
+local stopFertilizing = false
+TabCtrl:AddToggle({
+    Label   = "Enable Auto-Fertilizer",
+    Default = false,
+    Callback = function(state)
+        if state then
+            if fertilizing then return end
+            fertilizing = true; stopFertilizing = false
+            task.spawn(function()
+                while not stopFertilizing do
+                    local tool = getFertilizerFromBackpack()
+                    if tool then
+                        local dirt = getUnfertilizedDirt()
+                        if dirt then
+                            humanoid:EquipTool(tool)
+                            task.wait(0.5)
+                            ReplicatedStorage.Remotes.UseFertilizer:FireServer(dirt)
+                            print("Fertilizer placé sur : " .. dirt.Parent.Name .. " (" .. myPlot.Name .. ")")
+                            task.wait(0.5)
+                            humanoid:UnequipTools()
+                            task.wait(0.1)
+                        else
+                            -- Toutes les plantes sont fertilisées, on attend
+                            task.wait(5)
+                        end
+                    else
+                        -- Pas de stock, on attend
+                        task.wait(5)
+                    end
+                end
+                fertilizing = false
+            end)
+        else
+            stopFertilizing = true
+            VoidUI:Notify({ Title = "Stopped", Message = "Auto-fertilizer stopped.", Type = "warning", Duration = 3 })
+        end
     end,
 })
 
