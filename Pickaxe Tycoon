@@ -1,0 +1,117 @@
+local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
+VoidUI:SetScriptName("Pickaxe Tycoon ⛏️")
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local localPlayer = Players.LocalPlayer
+
+-- Trouver le plot
+local myPlot = nil
+for _, plot in ipairs(workspace.Plots:GetChildren()) do
+    if plot:GetAttribute("OwnerUserId") == localPlayer.UserId then
+        myPlot = plot
+        break
+    end
+end
+
+if not myPlot then
+    VoidUI:Notify({ Title = "Erreur", Message = "Aucun plot trouvé !", Type = "error", Duration = 5 })
+    return
+end
+
+VoidUI:Notify({ Title = "OreCollector", Message = "Plot trouvé : " .. myPlot.Name, Type = "success", Duration = 3 })
+
+-- Références
+local multText = workspace.OreMultPart.BillboardGui.Frame.MultText
+local depositButton = myPlot.Sell.DepositButton.Button
+
+-- Config
+local minMult = 1.4
+local sellActive = false
+local collectActive = false
+
+-- ── Fonctions ──
+local function autoSell()
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local button = workspace.Plots:FindFirstChild(myPlot.Name).Sell.DepositButton.Button
+    firetouchinterest(hrp, button, 0)
+    task.wait(0.1)
+    firetouchinterest(hrp, button, 1)
+end
+
+local function autoCollect()
+    local lootFolder = myPlot:FindFirstChild("LootSpawned")
+    if not lootFolder then return end
+
+    local levels = {}
+    for _, loot in ipairs(lootFolder:GetChildren()) do
+        local level = tonumber(loot.Name:match("%d+"))
+        if level then table.insert(levels, level) end
+    end
+
+    if #levels > 0 then
+        ReplicatedStorage.RemoteEvents.LootPickup:FireServer(levels)
+        VoidUI:Notify({ Title = "Auto Collect", Message = #levels .. " loots collectés", Type = "info", Duration = 2 })
+    end
+end
+
+-- ── UI ──
+local Win = VoidUI:CreateWindow({ Title = "OreCollector", Size = UDim2.new(0, 400, 0, 280) })
+local Tab = Win:AddTab("Main")
+
+Tab:AddTextInput({
+    Label       = "Min Mult",
+    Placeholder = "ex: 1.4",
+    Callback    = function(v)
+        local val = tonumber(v)
+        if val then
+            minMult = val
+            VoidUI:Notify({ Title = "Min Mult", Message = "Multiplicateur : " .. val .. "x", Type = "info", Duration = 2 })
+        else
+            VoidUI:Notify({ Title = "Erreur", Message = "Valeur invalide", Type = "error", Duration = 2 })
+        end
+    end,
+})
+
+Tab:AddToggle({
+    Label   = "Auto Sell",
+    Default = false,
+    Callback = function(v)
+        sellActive = v
+        VoidUI:Notify({ Title = "Auto Sell", Message = v and "Activé" or "Désactivé", Type = v and "success" or "warning", Duration = 2 })
+    end,
+})
+
+Tab:AddToggle({
+    Label   = "Auto Collect",
+    Default = false,
+    Callback = function(v)
+        collectActive = v
+        VoidUI:Notify({ Title = "Auto Collect", Message = v and "Activé" or "Désactivé", Type = v and "success" or "warning", Duration = 2 })
+    end,
+})
+
+-- ── Boucles ──
+task.spawn(function()
+    while task.wait(10) do
+        if sellActive then
+            local mult = tonumber(multText.Text:match("[%d%.]+"))
+            if mult and mult >= minMult then
+                autoSell()
+                VoidUI:Notify({ Title = "Auto Sell", Message = "Vendu ! (x" .. mult .. ")", Type = "success", Duration = 2 })
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(10) do
+        if collectActive then
+            autoCollect()
+        end
+    end
+end)
