@@ -1,0 +1,186 @@
+local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
+VoidUI:SetScriptName("Get Off My Lawn Brainrots")
+
+local player = game.Players.LocalPlayer
+local Network = game:GetService("ReplicatedStorage").SharedModules.Network
+local scrollFrame = player.PlayerGui.ItemShop.Window.Container.Body.ItemHolder.ScrollingFrame
+
+-- Charge les shops au démarrage
+fireproximityprompt(workspace.Map.Resources.Stands.Defenders["Cappuccino Assassino"].ProximityPrompt)
+task.wait(0.5)
+fireproximityprompt(workspace.Map.Resources.Stands.Gears["67"].ProximityPrompt)
+task.wait(1)
+
+local plotIndex = player:GetAttribute("VisualPlotIndex")
+local plot = workspace.Map.Plots["Plot_" .. plotIndex]
+
+-- ── HELPERS ──
+local function getDefenderInfo(index)
+    local name = string.format("Defender_%03d_Defender", index)
+    local slot = scrollFrame:FindFirstChild(name)
+    if not slot then return nil end
+    local container = slot.Container.Container
+    local stockText = container.StockLabel.Text
+    local stock = tonumber(stockText:match("x(%d+)")) or 0
+    return {
+        Index  = index,
+        Name   = container.NameLabel.Text,
+        Rarity = container.RarityLabel.Text,
+        Stock  = stock,
+    }
+end
+
+local function buyUntilEmpty(index)
+    while true do
+        local result = Network.BuyItemShopItem:InvokeServer("DefenderShop", index)
+        if result ~= true then break end
+        task.wait(0.3)
+    end
+end
+
+-- Collecte les defenders
+local defenderList = {}
+local optionLabels = {}
+local labelToIndex = {}
+
+for i = 1, 9 do
+    local info = getDefenderInfo(i)
+    if info then
+        table.insert(defenderList, info)
+        local label = info.Name .. " — " .. info.Rarity
+        table.insert(optionLabels, label)
+        labelToIndex[label] = info.Index
+    end
+end
+
+-- ── UI ──
+local Win = VoidUI:CreateWindow({
+    Title = "BrainrotFarm",
+    Size  = UDim2.new(0, 580, 0, 520),
+})
+
+-- ════════════════════════════════
+--  ONGLET DEFENDERS SHOP
+-- ════════════════════════════════
+local Tab1 = Win:AddTab("Defenders")
+
+local multiToggle = Tab1:AddMultiToggle({
+    Label    = "Defenders",
+    Options  = optionLabels,
+    Callback = function(_) end,
+})
+
+Tab1:AddLabel("Auto Buy")
+
+local autoBuying = false
+Tab1:AddToggle({
+    Label    = "Auto Buy",
+    Default  = false,
+    Callback = function(v)
+        autoBuying = v
+        if v then
+            task.spawn(function()
+                while autoBuying do
+                    local selected = multiToggle:GetValue()
+                    for label, active in pairs(selected) do
+                        if active then
+                            local index = labelToIndex[label]
+                            local info = getDefenderInfo(index)
+                            if info and info.Stock > 0 then
+                                buyUntilEmpty(index)
+                            end
+                        end
+                    end
+                    task.wait(120)
+                end
+            end)
+        end
+    end,
+})
+
+Tab1:AddButton({
+    Label    = "Buy Now",
+    Callback = function()
+        local selected = multiToggle:GetValue()
+        for label, active in pairs(selected) do
+            if active then
+                local index = labelToIndex[label]
+                local info = getDefenderInfo(index)
+                if info and info.Stock > 0 then
+                    buyUntilEmpty(index)
+                end
+            end
+        end
+        VoidUI:Notify({ Title = "Done", Message = "Achats terminés.", Type = "success", Duration = 2 })
+    end,
+})
+
+-- ════════════════════════════════
+--  ONGLET BRAINROTS LEVEL UP
+-- ════════════════════════════════
+local Tab2 = Win:AddTab("Brainrots")
+
+local targetLevel = 20
+Tab2:AddSlider({
+    Label    = "Niveau cible",
+    Min      = 1, Max = 100, Default = 20,
+    Callback = function(v) targetLevel = v end,
+})
+
+Tab2:AddLabel("Auto Level Up")
+
+local autoLeveling = false
+Tab2:AddToggle({
+    Label    = "Auto Level Up",
+    Default  = false,
+    Callback = function(v)
+        autoLeveling = v
+        if v then
+            task.spawn(function()
+                while autoLeveling do
+                    local currentPlotIndex = player:GetAttribute("VisualPlotIndex")
+                    for _, brainrot in ipairs(workspace.Live.Debris.PlotBrainrots:GetChildren()) do
+                        if not autoLeveling then break end
+                        if brainrot:GetAttribute("PlotIndex") == currentPlotIndex then
+                            local uid = brainrot:GetAttribute("ItemUID")
+                            local level = brainrot:GetAttribute("Level") or 0
+                            if uid and level < targetLevel then
+                                while autoLeveling do
+                                    local currentLevel = brainrot:GetAttribute("Level") or 0
+                                    if currentLevel >= targetLevel then break end
+                                    local result = Network.LevelUpBrainrot:InvokeServer(uid)
+                                    if result ~= true then break end
+                                    task.wait(0.1)
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end,
+})
+
+Tab2:AddButton({
+    Label    = "Level Up Now",
+    Callback = function()
+        local currentPlotIndex = player:GetAttribute("VisualPlotIndex")
+        for _, brainrot in ipairs(workspace.Live.Debris.PlotBrainrots:GetChildren()) do
+            if brainrot:GetAttribute("PlotIndex") == currentPlotIndex then
+                local uid = brainrot:GetAttribute("ItemUID")
+                local level = brainrot:GetAttribute("Level") or 0
+                if uid and level < targetLevel then
+                    while true do
+                        local currentLevel = brainrot:GetAttribute("Level") or 0
+                        if currentLevel >= targetLevel then break end
+                        local result = Network.LevelUpBrainrot:InvokeServer(uid)
+                        if result ~= true then break end
+                        task.wait(0.1)
+                    end
+                end
+            end
+        end
+        VoidUI:Notify({ Title = "Done", Message = "Level up terminé.", Type = "success", Duration = 2 })
+    end,
+})
