@@ -1,5 +1,5 @@
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
-VoidUI:SetScriptName("Get Off My Lawn Brainrots")
+VoidUI:SetScriptName("BrainrotFarm")
 
 local player = game.Players.LocalPlayer
 local Network = game:GetService("ReplicatedStorage").SharedModules.Network
@@ -182,5 +182,58 @@ Tab2:AddButton({
             end
         end
         VoidUI:Notify({ Title = "Done", Message = "Level up terminé.", Type = "success", Duration = 2 })
+    end,
+})
+
+-- ════════════════════════════════
+--  ONGLET ACTIONS
+-- ════════════════════════════════
+local Tab3 = Win:AddTab("Actions")
+
+Tab3:AddLabel("Auto Sell")
+
+local autoSell = false
+Tab3:AddToggle({
+    Label    = "Auto Sell",
+    Default  = false,
+    Callback = function(v)
+        autoSell = v
+        if v then
+            task.spawn(function()
+                while autoSell do
+                    Network.EquipBestBrainrots:InvokeServer()
+                    Network.SellAllBrainrots:InvokeServer()
+                    task.wait(30)
+                end
+            end)
+        end
+    end,
+})
+
+Tab3:AddLabel("Auto Collect")
+
+local autoCollect = false
+Tab3:AddToggle({
+    Label    = "Auto Collect",
+    Default  = false,
+    Callback = function(v)
+        autoCollect = v
+        if v then
+            task.spawn(function()
+                while autoCollect do
+                    local currentPlotIndex = player:GetAttribute("VisualPlotIndex")
+                    for _, brainrot in ipairs(workspace.Live.Debris.PlotBrainrots:GetChildren()) do
+                        if brainrot:GetAttribute("PlotIndex") == currentPlotIndex then
+                            local uid = brainrot:GetAttribute("ItemUID")
+                            if uid then
+                                Network.ClaimEarnings:InvokeServer(uid)
+                                task.wait(0.1)
+                            end
+                        end
+                    end
+                    task.wait(60)
+                end
+            end)
+        end
     end,
 })
