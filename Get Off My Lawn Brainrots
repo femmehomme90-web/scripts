@@ -1,5 +1,12 @@
 local VoidUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/femmehomme90-web/VoidUI/refs/heads/main/voidUI.lua"))()
 VoidUI:SetScriptName("BrainrotFarm")
+print("V.1")
+VoidUI:ShowCredit(function()
+
+print("Credit fermé, script lancé")
+
+
+
 
 local player = game.Players.LocalPlayer
 local Network = game:GetService("ReplicatedStorage").SharedModules.Network
@@ -237,3 +244,5 @@ Tab3:AddToggle({
         end
     end,
 })
+end)
+
